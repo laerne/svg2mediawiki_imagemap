@@ -9,7 +9,7 @@ command_re = re.compile("[a-zA-Z]")
 useless_re = re.compile("[,;:|\s]*")
 counter = 1
 link_template = "Link %d"
-def writeMapFromPath( string, transform, outputstream ):
+def writeMapFromPath( string, transform, outputstream, link_label = None ):
     global counter
     
     coordinates = []
@@ -70,13 +70,16 @@ def writeMapFromPath( string, transform, outputstream ):
             
         outputstream.write( " %d %d" % (round(x),round(y)) )
         
-    outputstream.write(" [[%s]]\n" % (link_template%counter) )
+    if link_label == None:
+        link_label = link_template % counter
+    outputstream.write(" [[%s]]\n" % (link_label) )
     counter += 1
 
 
-def writeMapFromRect( x, y, w, h, transform, outputstream ):
+def writeMapFromRect( x, y, w, h, transform, outputstream, link_label=None ):
     global counter
-    link_label = link_template % counter
+    if link_label == None:
+        link_label = link_template % counter
     
     if transform.is_rectilinear:
         left = round(x)
@@ -162,19 +165,22 @@ class TransformStack(object):
 
 import xml.etree.ElementTree as ET
 
-def writeMapFromSubTree( element, transform_stack, outputstream ):
+def writeMapFromSubTree( element, transform_stack, outputstream, use_id_as_labels = True ):
     n = 0
     #transform_stack.push()
+    
+    eid = element.attrib['id'] if use_id_as_labels and 'id' in element.attrib else None
     if element.tag[-4:] == 'path':
-        writeMapFromPath( element.attrib['d'], transform_stack.compute(), outputstream )
+        writeMapFromPath( element.attrib['d'], transform_stack.compute(), outputstream, link_label = eid )
     elif element.tag[-4:] == 'rect':
         #x, y = element.attrib['x'], element.attrib['y']
         #w, h = element.attrib['width'], element.attrib['height']
         x, y, w, h = map( lambda name: float(element.attrib[name]), ['x','y','width','height'] )
-        writeMapFromRect( x, y, w, h, transform_stack.compute(), outputstream )
+        writeMapFromRect( x, y, w, h, transform_stack.compute(), outputstream, link_label = eid )
         
     for subelement in element:
-        writeMapFromSubTree( subelement, transform_stack, outputstream )
+        writeMapFromSubTree( subelement, transform_stack, outputstream, use_id_as_labels )
+        
     #transform_stack.pop()
     
     
@@ -198,6 +204,7 @@ if __name__ == '__main__':
     parser.add_argument( 'svgfile', nargs='+', action='store' )
     parser.add_argument( '-g', '--groupname', action='store', default='imagemap' )
     parser.add_argument( '-a', '--all', dest='groupname', action='store_const', const=None )
+    parser.add_argument( '-i', '--id-links', action='store_true', default=False )
     args = parser.parse_args()
     
     imagemap_groupname = args.groupname
@@ -209,4 +216,4 @@ if __name__ == '__main__':
         if imagemap_element == None:
             print( "<!--could not find element %s in %s-->" %(repr(imagemap_groupname),repr(svg_filename)) )
         else:
-            writeMapFromSubTree( imagemap_element, TransformStack(), sys.stdout )
+            writeMapFromSubTree( imagemap_element, TransformStack(), sys.stdout, use_id_as_labels = args.id_links )
