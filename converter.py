@@ -25,6 +25,8 @@ def writeMapFromPath( string, transform, outputstream, link_label = None ):
     
     outputstream.write("poly")
     
+    print('\n')
+    print(transform)
     while len(word_stack)>0:
         word = word_stack.pop(0)
         
@@ -68,7 +70,9 @@ def writeMapFromPath( string, transform, outputstream, link_label = None ):
         else:
             outputstream.write( "<!--unimplemented behavior on %s, or mistyped command.-->" % repr(command) )
             
-        outputstream.write( " %d %d" % (round(x),round(y)) )
+        point = tuple(map( round, transform * ((x,y)) ))
+        outputstream.write(" <%.2f %.2f>" % (x,y))
+        outputstream.write( " %d %d" % point )
         
     if link_label == None:
         link_label = link_template % counter
@@ -82,17 +86,29 @@ def writeMapFromRect( x, y, w, h, transform, outputstream, link_label=None ):
         link_label = link_template % counter
     
     if transform.is_rectilinear:
-        left = round(x)
-        top = round(y)
-        right = x + round(w)
-        bottom = y + round(h)
+        ta, tb, tc, td, te, tf, tg, th, ti = transform
+        if (abs(ta) < affine.EPSILON and abs(te) < affine.EPSILON):
+            x1 = tb * y + tc
+            x2 = tb * (y+h) + tc
+            y1 = td * x + tf
+            y2 = td * (x+w) + tf
+        elif (abs(td) < affine.EPSILON and abs(tb) < affine.EPSILON):
+            x1 = ta * x + tf
+            x2 = ta * (x+w) + tf
+            y1 = te * y + tc
+            y2 = te * (y+h) + tc
+        left = round( min( x1, x2 ) )
+        top = round( min( y1, y2 ) )
+        right = round( max( x1, x2 ) )
+        bottom = round( max( y1, y2 ) )
         outputstream.write( "rect %d %d %d %d [[%s]]\n" % (left,top,right,bottom,link_label) )
     else:
-        a = x,y
-        b = x,y+h
-        c = x+w,y+h
-        d = x+w,y
-        outputstream.write( "poly %d %d %d %d %d %d %d %d [[%s]]\n" % (a+b+c+d+(link_label,)) )
+        a = transform * ((x,y))
+        b = transform * ((x,y+h))
+        c = transform * ((x+w,y+h))
+        d = transform * ((x+w,y))
+        value_tuple = tuple( map( round, a+b+c+d ) )
+        outputstream.write( "poly %d %d %d %d %d %d %d %d [[%s]]\n" % (value_tuple+(link_label,)) )
 
     counter += 1
 
@@ -105,14 +121,15 @@ import affine
 
 transform_re = re.compile("([a-zA-Z0-9]+)\(([^()]*)\)")
 def transformFromStr( string ):
-    match = transform.match( string )
+    match = transform_re.match( string )
     transform_type = match.group(1)
-    transform_args = list(float, match.group(2).split(","))
+    transform_args = list(map(float, match.group(2).split(",")))
     n = len(transform_args)
     
     if transform_type == "matrix":
         if n == 6:
-            return affine.Affine( *transform_args )
+            a, d, b, e, c, f = transform_args
+            return affine.Affine( a, b, c, d, e, f )
     elif transform_type == "translate":
         if n == 1:
             return affine.Affine.translation( transform_args[0], 0 )
@@ -149,10 +166,19 @@ class TransformStack(object):
     
     def push( self, transform ):
         self.stack_.append( transform )
-        composition = transform * self.precomputed_stack_[-1]
+        composition = self.precomputed_stack_[-1] * transform
+        print('-----------------')
+        print(self.precomputed_stack_[-1])
+        print('*')
+        print(transform)
+        print('=')
+        print(composition)
         self.precomputed_stack_.append( composition )
+        #print("---")
+        #print(self.precomputed_stack_[-1])
+        #print("---")
         
-    def pop( self, transform ):
+    def pop( self ):
         self.stack_.pop()
         self.precomputed_stack_.pop()
     
@@ -167,9 +193,11 @@ import xml.etree.ElementTree as ET
 
 def writeMapFromSubTree( element, transform_stack, outputstream, use_id_as_labels = True ):
     n = 0
-    #transform_stack.push()
     
     eid = element.attrib['id'] if use_id_as_labels and 'id' in element.attrib else None
+    if 'transform' in element.attrib:
+        transform_stack.push(transformFromStr(element.attrib['transform']))
+
     if element.tag[-4:] == 'path':
         writeMapFromPath( element.attrib['d'], transform_stack.compute(), outputstream, link_label = eid )
     elif element.tag[-4:] == 'rect':
@@ -181,7 +209,8 @@ def writeMapFromSubTree( element, transform_stack, outputstream, use_id_as_label
     for subelement in element:
         writeMapFromSubTree( subelement, transform_stack, outputstream, use_id_as_labels )
         
-    #transform_stack.pop()
+    if 'transform' in element.attrib:
+        transform_stack.pop()
     
     
 def findElementById( element, idname ):
