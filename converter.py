@@ -13,7 +13,7 @@ def writeMapFromPath( string, transform, outputstream, link_label = None ):
     global counter
     
     coordinates = []
-    words = re.split( "[a-zA-Z,;:|\s]", string )
+    words = re.split( "[zZmMlLhHvV,;:|\s]", string )
     word_stack = [ w for w in words if not useless_re.fullmatch(w) ]
     x = 0.0
     y = 0.0
@@ -25,8 +25,6 @@ def writeMapFromPath( string, transform, outputstream, link_label = None ):
     
     outputstream.write("poly")
     
-    print('\n')
-    print(transform)
     while len(word_stack)>0:
         word = word_stack.pop(0)
         
@@ -71,7 +69,6 @@ def writeMapFromPath( string, transform, outputstream, link_label = None ):
             outputstream.write( "<!--unimplemented behavior on %s, or mistyped command.-->" % repr(command) )
             
         point = tuple(map( round, transform * ((x,y)) ))
-        outputstream.write(" <%.2f %.2f>" % (x,y))
         outputstream.write( " %d %d" % point )
         
     if link_label == None:
@@ -167,15 +164,13 @@ class TransformStack(object):
     def push( self, transform ):
         self.stack_.append( transform )
         composition = self.precomputed_stack_[-1] * transform
-        print('-----------------')
-        print(self.precomputed_stack_[-1])
-        print('*')
-        print(transform)
-        print('=')
-        print(composition)
         self.precomputed_stack_.append( composition )
-        #print("---")
-        #print(self.precomputed_stack_[-1])
+        #print('-----------------')
+        #print(self.precomputed_stack_[-2])
+        #print('*')
+        #print(transform)
+        #print('=')
+        #print(composition)
         #print("---")
         
     def pop( self ):
@@ -231,9 +226,10 @@ if __name__ == '__main__':
             description="Convert shapes to clickable mediawiki <imagemap> links."
             )
     parser.add_argument( 'svgfile', nargs='+', action='store' )
-    parser.add_argument( '-g', '--groupname', action='store', default='imagemap' )
+    parser.add_argument( '-g', '--groupname', action='store', default=None )
     parser.add_argument( '-a', '--all', dest='groupname', action='store_const', const=None )
     parser.add_argument( '-i', '--id-links', action='store_true', default=False )
+    parser.add_argument( '-n', '--numeric-links', action='store_false', dest="id_links" )
     args = parser.parse_args()
     
     imagemap_groupname = args.groupname
